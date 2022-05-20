@@ -19,7 +19,7 @@
     "test": "(cd test-resources && npm install) && npm run build && ava build/test/app-test.js --timeout 5s",
     "start-emulator": "(gcloud beta emulators datastore start --no-store-on-disk --project emulator-project --host-port localhost:8380 &) 2>&1 | grep -m1 'now running'",
     "test-cache": "npm run build && npm run start-emulator && $(gcloud beta emulators datastore env-init) && export GCLOUD_PROJECT=emulator-project && ava build/test/*-cache-test.js",
-    "buf:generate": "buf generate",
+    "buf:generate": "buf generate && buf generate buf.build/grpc/grpc --path grpc/health/v1",
     "buf:lint": "buf lint"
   },
   "files": [
