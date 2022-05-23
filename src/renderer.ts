@@ -88,7 +88,7 @@ export class Renderer {
       omitBackground: req.imageOptions.omitBackground,
       clip: Renderer.clipFactory(req.imageOptions.clip),
     };
-
+    await page.evaluateHandle("document.fonts.ready");
     const screenshot = await page.screenshot(screenshotOptions);
     await page.close();
     await this.teardownBrowser();
