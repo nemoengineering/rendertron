@@ -5,7 +5,7 @@ import {
   Page,
   PuppeteerLifeCycleEvent,
   ScreenshotClip,
-  ScreenshotOptions
+  ScreenshotOptions,
 } from "puppeteer";
 import { dirname } from "path";
 
@@ -14,10 +14,11 @@ import {
   ScreenshotEncoding,
   ScreenshotImageOptionsClip,
   ScreenshotRequest,
-  ScreenshotResponse, ScreenshotType,
+  ScreenshotResponse,
+  ScreenshotType,
   SerializeRequest,
   SerializeResponse,
-  WaitUntil
+  WaitUntil,
 } from "../generated/_proto/nemoengineering/rendertron/v1/rendertron";
 import { Config } from "./config";
 import pino from "pino";
@@ -30,7 +31,14 @@ const MOBILE_USERAGENT =
  * APIs that are able to handle web components and PWAs.
  */
 export class Renderer {
-  private static readonly logger = pino({base: {"service": "server"}, formatters: { level: (label) => { return { level: label } } }})
+  private static readonly logger = pino({
+    base: { service: "server" },
+    formatters: {
+      level: (label) => {
+        return { level: label };
+      },
+    },
+  });
   private browser: Browser;
   private config: Config;
 
@@ -40,12 +48,10 @@ export class Renderer {
   }
 
   async shutdown() {
-    await this.browser.close()
+    await this.browser.close();
   }
 
-  async screenshot(
-    req: ScreenshotRequest
-  ): Promise<ScreenshotResponse> {
+  async screenshot(req: ScreenshotRequest): Promise<ScreenshotResponse> {
     if (this.isRestricted(req.url))
       throw new PageSetupError("Requested URL is restricted");
 
@@ -73,7 +79,7 @@ export class Renderer {
 
     if (!response.ok() && !req.screenshotError) {
       Renderer.logger.error(
-        `Page returned Status: ${response.status()} URL: ${req.url}`
+        `Page returned Status: ${response.status()} URL: ${req.url}`,
       );
       await page.close();
       await this.teardownBrowser();
@@ -106,10 +112,9 @@ export class Renderer {
     await page.close();
     await this.teardownBrowser();
 
-
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = {};
     for (const name in response.headers()) {
-      headers[name]  = response.headers()[name]
+      headers[name] = response.headers()[name];
     }
     return {
       type: req.imageOptions.type,
@@ -117,8 +122,8 @@ export class Renderer {
       headers,
 
       binary: screenshot instanceof Buffer ? screenshot : undefined,
-      base64: typeof screenshot === "string" ? screenshot : undefined
-    }
+      base64: typeof screenshot === "string" ? screenshot : undefined,
+    };
   }
 
   async serialize(req: SerializeRequest): Promise<SerializeResponse> {
@@ -131,7 +136,7 @@ export class Renderer {
     function stripPage() {
       // Strip only script tags that contain JavaScript (either no type attribute or one that contains "javascript")
       const elements = document.querySelectorAll(
-        'script:not([type]), script[type*="javascript"], script[type="module"], link[rel=import]'
+        'script:not([type]), script[type*="javascript"], script[type="module"], link[rel=import]',
       );
       for (const e of Array.from(elements)) {
         e.remove();
@@ -214,7 +219,7 @@ export class Renderer {
     let statusCode = response.status();
     const newStatusCode = await page
       .$eval('meta[name="render:status_code"]', (element) =>
-        parseInt(element.getAttribute("content") || "")
+        parseInt(element.getAttribute("content") || ""),
       )
       .catch(() => undefined);
     // On a repeat visit to the same origin, browser cache is enabled, so we may
@@ -237,7 +242,9 @@ export class Renderer {
         if (header) {
           const i = header.indexOf(":");
           if (i !== -1) {
-            result[header.substring(0, i).trim()] = header.substring(i + 1).trim()
+            result[header.substring(0, i).trim()] = header
+              .substring(i + 1)
+              .trim();
           }
         }
         return result;
@@ -251,7 +258,7 @@ export class Renderer {
     await page.evaluate(
       injectBaseHref,
       `${parsedUrl.protocol}//${parsedUrl.host}`,
-      `${dirname(parsedUrl.pathname || "")}`
+      `${dirname(parsedUrl.pathname || "")}`,
     );
 
     // Serialize page.
@@ -260,17 +267,14 @@ export class Renderer {
     await page.close();
     await this.teardownBrowser();
 
-
     return {
       content,
       statusCode,
       headers: customHeaders,
-    }
+    };
   }
 
-  private async setupPage(
-    conf: PageConfig | undefined
-  ): Promise<Page> {
+  private async setupPage(conf: PageConfig | undefined): Promise<Page> {
     if (!conf) throw new PageSetupError("Page config missing");
 
     const page = await this.browser.newPage();
@@ -304,7 +308,7 @@ export class Renderer {
         m[key] = value;
         return m;
       },
-      {}
+      {},
     );
     await page.setExtraHTTPHeaders(headers);
 
@@ -363,7 +367,7 @@ export class Renderer {
   }
 
   private static clipFactory(
-    clip: ScreenshotImageOptionsClip | undefined
+    clip: ScreenshotImageOptionsClip | undefined,
   ): ScreenshotClip | undefined {
     if (!clip) return;
     if (!clip.dimensions) throw new PageSetupError("Clip dimensions missing");
@@ -375,9 +379,7 @@ export class Renderer {
     };
   }
 
-  private static waitUntilFactory(
-    req: WaitUntil
-  ): PuppeteerLifeCycleEvent {
+  private static waitUntilFactory(req: WaitUntil): PuppeteerLifeCycleEvent {
     switch (req) {
       case WaitUntil.LOAD:
         return "load";
@@ -406,7 +408,7 @@ export class Renderer {
   }
 
   private static encodingFactory(
-    req: ScreenshotEncoding
+    req: ScreenshotEncoding,
   ): ScreenshotOptions["encoding"] {
     switch (req) {
       case ScreenshotEncoding.BASE64:
