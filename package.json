@@ -32,10 +32,10 @@
     "google-protobuf": "^3.21.2",
     "nice-grpc": "^2.1.5",
     "nice-grpc-server-health": "^2.0.7",
+    "pino": "^8.15.0",
     "puppeteer": "^21.1.0"
   },
   "devDependencies": {
-    "ts-proto": "^1.156.7",
     "@types/google-protobuf": "^3.15.6",
     "@types/node": "^20.5.6",
     "@types/puppeteer": "^7.0.4",
@@ -44,6 +44,7 @@
     "eslint": "^8.47.0",
     "nodemon": "^3.0.1",
     "prettier": "^3.0.2",
+    "ts-proto": "^1.156.7",
     "typescript": "^5.2.2"
   },
   "prettier": {

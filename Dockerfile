@@ -10,15 +10,13 @@ COPY buf.gen.yaml .
 COPY src src
 COPY proto proto
 
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 RUN VERSION="1.4.0" && \
     curl -sSL \
     "https://github.com/bufbuild/buf/releases/download/v${VERSION}/buf-$(uname -s)-$(uname -m)" \
     -o "/usr/local/bin/buf" && \
     chmod +x "/usr/local/bin/buf"
-
-RUN VERSION="3.15.8" && \
-    curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${VERSION}/protoc-${VERSION}-linux-x86_64.zip" && \
-    unzip "protoc-${VERSION}-linux-x86_64.zip" -d /
 
 RUN npm install && npm run build
 
@@ -36,6 +34,8 @@ RUN apt-get update \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
 RUN GRPC_HEALTH_PROBE_VERSION=v0.4.11 && \
     wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
     chmod +x /bin/grpc_health_probe
@@ -46,6 +46,7 @@ COPY --from=builder /usr/src/rendertron/package.json .
 COPY --from=builder /usr/src/rendertron/node_modules node_modules
 COPY --from=builder /usr/src/rendertron/build build
 COPY --from=builder /usr/src/rendertron/generated generated
+COPY .puppeteerrc.cjs .
 
 # Install puppeteer so it's available in the container.
 RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
@@ -56,4 +57,4 @@ RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
 # Run everything after as non-privileged user.
 USER pptruser
 
-ENTRYPOINT ["npm", "run", "start"]
+ENTRYPOINT ["node", "build/src/index.js"]

@@ -20,6 +20,7 @@ import {
   WaitUntil
 } from "../generated/_proto/nemoengineering/rendertron/v1/rendertron";
 import { Config } from "./config";
+import pino from "pino";
 
 const MOBILE_USERAGENT =
   "Mozilla/5.0 (Linux; Android 8.0.0; Pixel 2 XL Build/OPD1.170816.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.75 Mobile Safari/537.36";
@@ -29,12 +30,17 @@ const MOBILE_USERAGENT =
  * APIs that are able to handle web components and PWAs.
  */
 export class Renderer {
+  private static readonly logger = pino({base: {"service": "server"}, formatters: { level: (label) => { return { level: label } } }})
   private browser: Browser;
   private config: Config;
 
   constructor(browser: Browser, config: Config) {
     this.browser = browser;
     this.config = config;
+  }
+
+  async shutdown() {
+    await this.browser.close()
   }
 
   async screenshot(
@@ -66,7 +72,7 @@ export class Renderer {
     }
 
     if (!response.ok() && !req.screenshotError) {
-      console.error(
+      Renderer.logger.error(
         `Page returned Status: ${response.status()} URL: ${req.url}`
       );
       await page.close();
@@ -181,12 +187,12 @@ export class Renderer {
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
-      console.error(e);
+      Renderer.logger.error(e);
       throw new Error(e);
     }
 
     if (!response) {
-      console.error("response does not exist");
+      Renderer.logger.error("response does not exist");
       // This should only occur when the page is about:blank. See
       // https://github.com/GoogleChrome/puppeteer/blob/v1.5.0/docs/api.md#pagegotourl-options.
       await page.close();
