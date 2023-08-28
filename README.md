@@ -44,6 +44,7 @@ your application is rendered well before the budget expires.
 
 ### Web components
 
+[index.ts](src%2Findex.ts)
 Headless Chrome supports web components but shadow DOM is difficult to serialize effectively.
 As such, [shady DOM](https://github.com/webcomponents/shadydom) (a lightweight shim for Shadow DOM)
 is required for web components.
