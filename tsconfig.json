@@ -9,8 +9,8 @@
     "pretty": true,
     "declaration": true,
     "sourceMap": true,
-    "rootDir": "./src",
     "outDir": "./build"
   },
-  "include": ["./src/**/*.ts"]
+  "include": ["./src/**/*.ts", "./generated/**/*.ts"],
+  "exclude": ["./build"]
 }

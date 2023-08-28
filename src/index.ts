@@ -1,39 +1,26 @@
-import {
-  Server,
-  ServerCredentials,
-  ServerErrorResponse,
-  StatusObject,
-} from "@grpc/grpc-js";
-import {
-  IRendertronServiceServer,
-  RendertronServiceService,
-} from "../generated/nodejs/nemoengineering/rendertron/v1/rendertron_grpc_pb";
-import {
-  HealthService,
-  IHealthServer,
-} from "../generated/nodejs/grpc/health/v1/health_grpc_pb";
+import { ServerCredentials } from "@grpc/grpc-js";
 import { Config, config } from "./config";
+import { PageError, PageSetupError, Renderer, ScreenshotError } from "./renderer";
+import puppeteer, { TimeoutError } from "puppeteer";
+import { createServer, ServerError, Status } from "nice-grpc";
+import { HealthDefinition, HealthServiceImpl, HealthState } from "nice-grpc-server-health";
 import {
-  PageError,
-  PageSetupError,
-  Renderer,
-  ScreenshotError,
-} from "./renderer";
-import puppeteer from "puppeteer";
-import { Status } from "@grpc/grpc-js/build/src/constants";
-import { HealthCheckResponse } from "../generated/nodejs/grpc/health/v1/health_pb";
+  RendertronServiceDefinition,
+  RendertronServiceImplementation
+} from "../generated/_proto/nemoengineering/rendertron/v1/rendertron";
 
 class Rendertron {
-  private server = new Server();
-  private config: Config;
-  private renderer: Renderer | undefined;
+  private server = createServer();
+  private  healthState = HealthState()
+  private readonly config: Config;
+  private renderer!: Renderer;
 
   constructor(config: Config) {
     this.config = config;
   }
 
   async createRenderer() {
-    const browser = await puppeteer.launch({ args: this.config.puppeteerArgs });
+    const browser = await puppeteer.launch({ args: this.config.puppeteerArgs, headless: "new"});
 
     browser.on("disconnected", () => {
       this.createRenderer();
@@ -49,76 +36,56 @@ class Rendertron {
     this.configureHealthService();
 
     const listener = `${this.config.host}:${this.config.port}`;
-    this.server.bindAsync(listener, ServerCredentials.createInsecure(), () => {
-      this.server.start();
-
-      console.log(`server is running on ${listener}`);
-    });
+    console.log(`Listening on: ${listener}`)
+    await this.server.listen(listener, ServerCredentials.createInsecure())
   }
 
   private configureRendertronService() {
-    const service: IRendertronServiceServer = {
-      screenshot: (call, callback) => {
-        console.log("screenshot of: ", call.request.getUrl());
+    const service: RendertronServiceImplementation = {
+       screenshot: async (call) => {
+        console.log("screenshot of: ", call.url);
 
-        this.renderer
-          ?.screenshot(call.request.toObject())
-          .then((res) => callback(null, res))
-          .catch((err) => callback(Rendertron.handleError(err)));
+        try {
+          return await this.renderer
+          .screenshot(call)
+        } catch (err) {
+          throw Rendertron.handleError(err);
+        }
+
       },
-      serialize: (call, callback) => {
-        console.log("serializing of: ", call.request.getUrl());
-        this.renderer
-          ?.serialize(call.request.toObject())
-          .then((res) => callback(null, res))
-          .catch((err) => callback(Rendertron.handleError(err)));
+      serialize: async (call) => {
+        console.log("serializing of: ", call.url);
+
+        try {
+          return await this.renderer
+            .serialize(call);
+        } catch (err) {
+          throw Rendertron.handleError(err);
+        }
       },
     };
 
-    this.server.addService(RendertronServiceService, service);
+    this.server.add(RendertronServiceDefinition, service);
   }
 
   private configureHealthService() {
-    const healthCheckResponse = new HealthCheckResponse();
-    healthCheckResponse.setStatus(HealthCheckResponse.ServingStatus.SERVING);
-    const health: IHealthServer = {
-      check: (_, callback) => callback(null, healthCheckResponse),
-      watch: (call) => {
-        call.write(healthCheckResponse);
-        call.end();
-      },
-    };
-
-    this.server.addService(HealthService, health);
+    this.server.add(HealthDefinition, HealthServiceImpl(this.healthState))
   }
 
   private static handleError(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    err: any
-  ): Partial<StatusObject> | ServerErrorResponse {
+    err: unknown
+  ): ServerError {
     console.error(err);
     if (err instanceof PageError) {
-      return {
-        code: Status.FAILED_PRECONDITION,
-        name: err.status.toString(),
-        message: `Requested page returned non 2xx code. (Code: ${err.status})`,
-      };
+      return  new ServerError(Status.FAILED_PRECONDITION, `Requested page returned non 2xx code. (Code: ${err.status})`)
     } else if (err instanceof PageSetupError) {
-      return err;
+      return  new ServerError(Status.FAILED_PRECONDITION, err.message)
     } else if (err instanceof ScreenshotError) {
-      return err;
-    } else if (err instanceof puppeteer.errors.TimeoutError) {
-      return {
-        code: Status.ABORTED,
-        message: err.message,
-        name: err.name,
-      };
+      return  new ServerError(Status.INTERNAL, err.message)
+    } else if (err instanceof TimeoutError) {
+      return  new ServerError(Status.ABORTED, err.message)
     } else {
-      console.error(err);
-      return {
-        message: "Internal error",
-        code: Status.INTERNAL,
-      };
+      return  new ServerError(Status.INTERNAL, "Internal Error")
     }
   }
 }

@@ -4,12 +4,12 @@
   "description": "Renders webpages using headless Chrome for usage by bots",
   "license": "Apache-2.0",
   "repository": "https://github.com/GoogleChrome/rendertron",
-  "main": "build/index.js",
+  "main": "build/src/index.js",
   "bin": "bin/rendertron",
   "scripts": {
     "build": "npm run buf:generate && tsc",
     "prepack": "npm run build",
-    "start": "node build/index.js",
+    "start": "node build/src/index.js",
     "format": "npm run format:eslint && npm run format:prettier",
     "format:eslint": "npm run lint -- --fix",
     "format:prettier": "prettier \"**/*.{html,js,json,md,ts}\" --ignore-path .gitignore --write",
@@ -19,7 +19,7 @@
     "test": "(cd test-resources && npm install) && npm run build && ava build/test/app-test.js --timeout 5s",
     "start-emulator": "(gcloud beta emulators datastore start --no-store-on-disk --project emulator-project --host-port localhost:8380 &) 2>&1 | grep -m1 'now running'",
     "test-cache": "npm run build && npm run start-emulator && $(gcloud beta emulators datastore env-init) && export GCLOUD_PROJECT=emulator-project && ava build/test/*-cache-test.js",
-    "buf:generate": "buf generate && buf generate buf.build/grpc/grpc --path grpc/health/v1",
+    "buf:generate": "buf generate",
     "buf:lint": "buf lint"
   },
   "files": [
@@ -27,23 +27,24 @@
     "!build/test/"
   ],
   "dependencies": {
-    "@grpc/grpc-js": "^1.6.7",
-    "@types/google-protobuf": "^3.15.6",
-    "@webcomponents/webcomponentsjs": "^2.6.0",
-    "dotenv": "^16.0.1",
-    "puppeteer": "^13.5.1"
+    "@grpc/grpc-js": "^1.9.1",
+    "dotenv": "^16.3.1",
+    "google-protobuf": "^3.21.2",
+    "nice-grpc": "^2.1.5",
+    "nice-grpc-server-health": "^2.0.7",
+    "puppeteer": "^21.1.0"
   },
   "devDependencies": {
-    "@types/node": "^17.0.23",
-    "@types/puppeteer": "^5.4.5",
-    "@typescript-eslint/eslint-plugin": "^5.17.0",
-    "@typescript-eslint/parser": "^5.17.0",
-    "eslint": "^8.12.0",
-    "grpc_tools_node_protoc_ts": "^5.3.2",
-    "grpc-tools": "^1.11.2",
-    "nodemon": "^2.0.15",
-    "prettier": "^2.6.1",
-    "typescript": "4.6.3"
+    "ts-proto": "^1.156.7",
+    "@types/google-protobuf": "^3.15.6",
+    "@types/node": "^20.5.6",
+    "@types/puppeteer": "^7.0.4",
+    "@typescript-eslint/eslint-plugin": "^6.4.1",
+    "@typescript-eslint/parser": "^6.4.1",
+    "eslint": "^8.47.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.0.2",
+    "typescript": "^5.2.2"
   },
   "prettier": {
     "singleQuote": false

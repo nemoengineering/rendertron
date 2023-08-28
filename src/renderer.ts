@@ -1,17 +1,24 @@
-import puppeteer, { ScreenshotOptions } from "puppeteer";
+import {
+  Browser,
+  HTTPRequest,
+  HTTPResponse,
+  Page,
+  PuppeteerLifeCycleEvent,
+  ScreenshotClip,
+  ScreenshotOptions
+} from "puppeteer";
 import { dirname } from "path";
 
 import {
   PageConfig,
   ScreenshotEncoding,
-  ScreenshotImageOptions,
+  ScreenshotImageOptionsClip,
   ScreenshotRequest,
-  ScreenshotResponse,
-  ScreenshotType,
+  ScreenshotResponse, ScreenshotType,
   SerializeRequest,
   SerializeResponse,
-  WaitUntil,
-} from "../generated/nodejs/nemoengineering/rendertron/v1/rendertron_pb";
+  WaitUntil
+} from "../generated/_proto/nemoengineering/rendertron/v1/rendertron";
 import { Config } from "./config";
 
 const MOBILE_USERAGENT =
@@ -22,23 +29,23 @@ const MOBILE_USERAGENT =
  * APIs that are able to handle web components and PWAs.
  */
 export class Renderer {
-  private browser: puppeteer.Browser;
+  private browser: Browser;
   private config: Config;
 
-  constructor(browser: puppeteer.Browser, config: Config) {
+  constructor(browser: Browser, config: Config) {
     this.browser = browser;
     this.config = config;
   }
 
   async screenshot(
-    req: ScreenshotRequest.AsObject
+    req: ScreenshotRequest
   ): Promise<ScreenshotResponse> {
     if (this.isRestricted(req.url))
       throw new PageSetupError("Requested URL is restricted");
 
     const page = await this.setupPage(req.pageConfig);
 
-    let response: puppeteer.HTTPResponse | undefined;
+    let response: HTTPResponse | null;
     try {
       // Navigate to page. Wait until there are no oustanding network requests.
       response = await page.goto(req.url, {
@@ -93,24 +100,22 @@ export class Renderer {
     await page.close();
     await this.teardownBrowser();
 
-    const res = new ScreenshotResponse();
-    res.setType(req.imageOptions.type);
-    res.setStatusCode(response.status());
 
+    const headers: Record<string, string> = {}
     for (const name in response.headers()) {
-      res.getHeadersMap().set(name, response.headers()[name]);
+      headers[name]  = response.headers()[name]
     }
+    return {
+      type: req.imageOptions.type,
+      statusCode: response.status(),
+      headers,
 
-    if (screenshot instanceof Buffer) {
-      res.setBinary(screenshot);
-    } else {
-      res.setBase64(screenshot);
+      binary: screenshot instanceof Buffer ? screenshot : undefined,
+      base64: typeof screenshot === "string" ? screenshot : undefined
     }
-
-    return res;
   }
 
-  async serialize(req: SerializeRequest.AsObject): Promise<SerializeResponse> {
+  async serialize(req: SerializeRequest): Promise<SerializeResponse> {
     if (this.isRestricted(req.url))
       throw new PageSetupError("Requested URL is restricted");
     /**
@@ -155,16 +160,16 @@ export class Renderer {
     }
     const page = await this.setupPage(req.pageConfig);
 
-    page.evaluateOnNewDocument("customElements.forcePolyfill = true");
-    page.evaluateOnNewDocument("ShadyDOM = {force: true}");
-    page.evaluateOnNewDocument("ShadyCSS = {shimcssproperties: true}");
+    await page.evaluateOnNewDocument("customElements.forcePolyfill = true");
+    await page.evaluateOnNewDocument("ShadyDOM = {force: true}");
+    await page.evaluateOnNewDocument("ShadyCSS = {shimcssproperties: true}");
 
-    let response: puppeteer.HTTPResponse | null = null;
+    let response: HTTPResponse | null = null;
     // Capture main frame response. This is used in the case that rendering
     // times out, which results in puppeteer throwing an error. This allows us
     // to return a partial response for what was able to be rendered in that
     // time frame.
-    page.on("response", (r: puppeteer.HTTPResponse) => {
+    page.on("response", (r: HTTPResponse) => {
       if (!response) response = r;
     });
 
@@ -221,20 +226,17 @@ export class Renderer {
     // to the crawlers.
     const customHeaders = await page
       .$eval('meta[name="render:header"]', (element) => {
-        const result = new Map<string, string>();
+        const result: Record<string, string> = {};
         const header = element.getAttribute("content");
         if (header) {
           const i = header.indexOf(":");
           if (i !== -1) {
-            result.set(
-              header.substring(0, i).trim(),
-              header.substring(i + 1).trim()
-            );
+            result[header.substring(0, i).trim()] = header.substring(i + 1).trim()
           }
         }
-        return JSON.stringify([...result]);
+        return result;
       })
-      .catch(() => undefined);
+      .catch(() => ({}));
 
     // Remove script & import tags.
     await page.evaluate(stripPage);
@@ -252,21 +254,17 @@ export class Renderer {
     await page.close();
     await this.teardownBrowser();
 
-    const res = new SerializeResponse();
-    res.setContent(content);
-    res.setStatusCode(statusCode);
 
-    const resHeaders: Map<string, string> = customHeaders
-      ? new Map(JSON.parse(customHeaders))
-      : new Map();
-    resHeaders.forEach((value, key) => res.getHeadersMap().set(key, value));
-
-    return res;
+    return {
+      content,
+      statusCode,
+      headers: customHeaders,
+    }
   }
 
   private async setupPage(
-    conf: PageConfig.AsObject | undefined
-  ): Promise<puppeteer.Page> {
+    conf: PageConfig | undefined
+  ): Promise<Page> {
     if (!conf) throw new PageSetupError("Page config missing");
 
     const page = await this.browser.newPage();
@@ -295,7 +293,7 @@ export class Renderer {
       }
     }
 
-    const headers = conf.headersMap.reduce<{ [key: string]: string }>(
+    const headers = Object.entries(conf.headers).reduce<Record<string, string>>(
       (m, [key, value]) => {
         m[key] = value;
         return m;
@@ -306,7 +304,7 @@ export class Renderer {
 
     await page.setRequestInterception(true);
 
-    page.on("request", (interceptedRequest: puppeteer.HTTPRequest) => {
+    page.on("request", (interceptedRequest: HTTPRequest) => {
       if (this.restrictRequest(interceptedRequest.url())) {
         interceptedRequest.abort();
       } else {
@@ -359,8 +357,8 @@ export class Renderer {
   }
 
   private static clipFactory(
-    clip: ScreenshotImageOptions.Clip.AsObject | undefined
-  ): puppeteer.ScreenshotClip | undefined {
+    clip: ScreenshotImageOptionsClip | undefined
+  ): ScreenshotClip | undefined {
     if (!clip) return;
     if (!clip.dimensions) throw new PageSetupError("Clip dimensions missing");
     return {
@@ -373,15 +371,15 @@ export class Renderer {
 
   private static waitUntilFactory(
     req: WaitUntil
-  ): puppeteer.PuppeteerLifeCycleEvent {
+  ): PuppeteerLifeCycleEvent {
     switch (req) {
-      case WaitUntil.WAIT_UNTIL_LOAD:
+      case WaitUntil.LOAD:
         return "load";
-      case WaitUntil.WAIT_UNTIL_DOMCONTENT_LOADED:
+      case WaitUntil.DOMCONTENT_LOADED:
         return "domcontentloaded";
-      case WaitUntil.WAIT_UNTIL_NET_IDLE_0:
+      case WaitUntil.NET_IDLE_0:
         return "networkidle0";
-      case WaitUntil.WAIT_UNTIL_NET_IDLE_2:
+      case WaitUntil.NET_IDLE_2:
         return "networkidle2";
       default:
         return "networkidle0";
@@ -390,11 +388,11 @@ export class Renderer {
 
   private static typeFactory(req: ScreenshotType): ScreenshotOptions["type"] {
     switch (req) {
-      case ScreenshotType.SCREENSHOT_TYPE_JPEG:
+      case ScreenshotType.JPEG:
         return "jpeg";
-      case ScreenshotType.SCREENSHOT_TYPE_PNG:
+      case ScreenshotType.PNG:
         return "png";
-      case ScreenshotType.SCREENSHOT_TYPE_WEBP:
+      case ScreenshotType.WEBP:
         return "webp";
       default:
         return "jpeg";
@@ -405,9 +403,9 @@ export class Renderer {
     req: ScreenshotEncoding
   ): ScreenshotOptions["encoding"] {
     switch (req) {
-      case ScreenshotEncoding.SCREENSHOT_ENCODING_BASE64:
+      case ScreenshotEncoding.BASE64:
         return "base64";
-      case ScreenshotEncoding.SCREENSHOT_ENCODING_BINARY:
+      case ScreenshotEncoding.BINARY:
         return "binary";
       default:
         return "base64";
